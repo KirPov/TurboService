@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  CLIENT
+  SERVICE_EMPLOYEE
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  CreatedAt    DateTime      @default(now())
+  role         Role          @default(CLIENT)
+  cars         Car[]
+  applications Application[]
+
+  @@map("users")
+}
+
+model Car {
+  id           Int           @id @default(autoincrement())
+  brand        String
+  model        String
+  year         Int
+  ownerId      Int
+  applications Application[]
+  createdAt    DateTime      @default(now())
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("cars")
+}
+
+model Application {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  carId       Int
+  description String
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user                User                 @relation(fields: [userId], references: [id])
+  car                 Car                  @relation(fields: [carId], references: [id])
+  services            Service[] // связь многие ко многим с услугами
+  applicationServices ApplicationService[] // обратная связь для промежуточной таблицы
+
+  @@map("applications")
+}
+
+model Service {
+  id                  Int                  @id @default(autoincrement())
+  title               String
+  description         String
+  price               Int
+  applications        Application[] // связь многие ко многим с заявками
+  applicationServices ApplicationService[] // обратная связь для промежуточной таблицы
+
+  @@map("services")
+}
+
+model ApplicationService {
+  applicationId Int
+  serviceId     Int
+
+  application Application @relation(fields: [applicationId], references: [id])
+  service     Service     @relation(fields: [serviceId], references: [id])
+
+  @@id([applicationId, serviceId]) // составной первичный ключ
+  @@map("application_services")
+}
+
+enum EnumUserRole {
+  ADMIN
+  MANAGER
+  CLIENT
+  SERVICE_EMPLOYEE
+}
