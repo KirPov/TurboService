@@ -124,7 +124,6 @@ const ProfilePage: FC = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-white py-8">
       <div className="container mx-auto px-4">
-        {/* Блок профиля */}
         <motion.section className="bg-gray-800 rounded-xl p-6 border border-gray-700 mb-10">
           <h2 className="text-xl font-semibold mb-4">Данные профиля</h2>
           <div className="grid gap-4 md:grid-cols-2">
@@ -156,7 +155,41 @@ const ProfilePage: FC = () => {
           </div>
         </motion.section>
 
-        {/* Заявки и автомобили (без изменений) */}
+        {/* Сохранённые автомобили */}
+        <motion.section className="bg-gray-800 rounded-xl p-6 border border-gray-700 mb-10">
+          <div className="flex items-center mb-4">
+            <FaCar className="text-2xl text-green-400 mr-3" />
+            <h2 className="text-2xl font-bold">Мои автомобили</h2>
+          </div>
+          {cars.length === 0 ? (
+            <p className="text-gray-400">Нет сохранённых автомобилей</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {cars.map((car) => (
+                <div
+                  key={car.id}
+                  className="bg-gray-700 p-4 rounded-lg border border-gray-600 shadow-md hover:shadow-green-500/30 transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-1">
+                      {car.brand} {car.model}
+                    </h3>
+                    <p className="text-sm text-gray-300">Год: {car.year}</p>
+                  </div>
+                  <button
+                    onClick={() => deleteCar(car.id)}
+                    className="mt-4 self-end text-red-400 hover:text-red-300"
+                    title="Удалить авто"
+                  >
+                    <FaTrash />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </motion.section>
+
+        {/* Текущие заявки */}
         <motion.section className="bg-gray-800 rounded-xl p-6 border border-gray-700 mb-10 shadow-lg">
           <div className="flex items-center mb-4">
             <FaClipboardList className="text-2xl text-cyan-400 mr-3" />

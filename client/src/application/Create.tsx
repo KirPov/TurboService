@@ -32,6 +32,10 @@ const ApplicationCreate: FC = () => {
   const [applicationId, setApplicationId] = useState<number | null>(null);
   const [isApproved, setIsApproved] = useState(false);
 
+  const [useSavedCar, setUseSavedCar] = useState(false);
+  const [savedCars, setSavedCars] = useState<any[]>([]);
+  const [selectedSavedCarId, setSelectedSavedCarId] = useState<number | null>(null);
+
   const { user } = useAuth();
 
   const totalDuration = services
@@ -48,6 +52,16 @@ const ApplicationCreate: FC = () => {
     }
   };
 
+  const fetchSavedCars = async () => {
+    try {
+      const res = await fetch(`http://localhost:4100/api/cars/me?userId=${user?.id}`);
+      const data = await res.json();
+      setSavedCars(data);
+    } catch {
+      toast.error('Ошибка загрузки автомобилей');
+    }
+  };
+
   const fetchApplicationStatus = async (id: number) => {
     try {
       const res = await fetch(`http://localhost:4100/api/application/${id}`);
@@ -59,7 +73,7 @@ const ApplicationCreate: FC = () => {
   };
 
   const submitHandler = async () => {
-    if (!description || !carBrand || !carModel || selectedServices.length === 0 || !selectedDateTime || !carYear) {
+    if (!description || (!carBrand || !carModel || !carYear) || selectedServices.length === 0 || !selectedDateTime) {
       toast.error('Заполните все поля');
       return;
     }
@@ -71,6 +85,7 @@ const ApplicationCreate: FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user?.id,
+          carId: useSavedCar ? selectedSavedCarId : null,
           carBrand,
           carModel,
           year: carYear,
@@ -109,6 +124,7 @@ const ApplicationCreate: FC = () => {
 
   useEffect(() => {
     fetchServices();
+    if (user?.id) fetchSavedCars();
 
     const lastId = localStorage.getItem('lastApplicationId');
     if (lastId) {
@@ -116,7 +132,16 @@ const ApplicationCreate: FC = () => {
       setApplicationId(id);
       fetchApplicationStatus(id);
     }
-  }, []);
+  }, [user]);
+
+  useEffect(() => {
+    const selected = savedCars.find((c) => c.id === selectedSavedCarId);
+    if (selected) {
+      setCarBrand(selected.brand);
+      setCarModel(selected.model);
+      setCarYear(selected.year);
+    }
+  }, [selectedSavedCarId]);
 
   useEffect(() => {
     const handleStatusUpdate = (data: { applicationId: number; status: string }) => {
@@ -144,16 +169,50 @@ const ApplicationCreate: FC = () => {
           Создание заявки на ремонт
         </motion.h1>
 
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={useSavedCar}
+            onChange={() => {
+              setUseSavedCar(!useSavedCar);
+              setSelectedSavedCarId(null);
+              setCarBrand('');
+              setCarModel('');
+              setCarYear(null);
+            }}
+            className="accent-cyan-500"
+          />
+          <span className="text-sm">Выбрать из сохранённых авто</span>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-6">
-            <CarAutoSelect
-              onCarSelected={(brand, model) => {
-                setCarBrand(brand);
-                setCarModel(model);
-              }}
-              initialBrand={carBrand}
-              initialModel={carModel}
-            />
+            {useSavedCar ? (
+              <div>
+                <label className="block text-sm mb-1 text-gray-300">Выберите автомобиль</label>
+                <select
+                  value={selectedSavedCarId ?? ''}
+                  onChange={(e) => setSelectedSavedCarId(Number(e.target.value))}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded text-white"
+                >
+                  <option value="">— Не выбрано —</option>
+                  {savedCars.map((car) => (
+                    <option key={car.id} value={car.id}>
+                      {car.brand} {car.model} ({car.year})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <CarAutoSelect
+                onCarSelected={(brand, model) => {
+                  setCarBrand(brand);
+                  setCarModel(model);
+                }}
+                initialBrand={carBrand}
+                initialModel={carModel}
+              />
+            )}
 
             <div>
               <label className="block text-sm mb-1 text-gray-300">Год выпуска</label>
