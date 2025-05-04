@@ -3,7 +3,9 @@ export type UserRole = 'ADMIN' | 'MANAGER' | 'CLIENT' | 'SERVICE_EMPLOYEE';
 export interface IUser {
   id: number;
   email: string;
-  role: UserRole; // Используем конкретный тип
+  role: UserRole;
+  name: string;
+  phone: string; // Используем конкретный тип
 }
 
 export interface IUserData {

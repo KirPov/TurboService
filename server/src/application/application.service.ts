@@ -1,77 +1,115 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
-import { NotificationGateway } from '../notification/notification.gateway'; // Импортируем NotificationGateway
+import { NotificationGateway } from '../notification/notification.gateway';
+import { WorkStatus } from '@prisma/client';
 
 @Injectable()
 export class ApplicationService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationGateway: NotificationGateway, // Внедряем NotificationGateway
+    private readonly notificationGateway: NotificationGateway,
   ) {}
 
-  // Получение всех заявок
   async findAll() {
     return this.prisma.application.findMany({
       include: {
         services: true,
         user: true,
         car: true,
+        assignedEmployee: true, // 🔥 добавь это!
       },
     });
   }
+  
 
-  // Создание новой заявки
-  async create(dto: CreateApplicationDto) {
-    const { userId, carBrand, carModel, description, serviceIds } = dto;
-
-    // Проверяем, существует ли пользователь
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+  async isSlotAvailable(startDate: Date, endDate: Date): Promise<boolean> {
+    const applications = await this.prisma.application.findMany({
+      where: {
+        status: 'approved', // ✅ теперь учитываются только подтверждённые заявки
+        OR: [
+          { startDate: { gte: startDate, lt: endDate } },
+          { endDate: { gt: startDate, lte: endDate } },
+          { startDate: { lte: startDate }, endDate: { gte: endDate } }, // перекрытие всего периода
+        ],
+      },
     });
 
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
-    }
+    return applications.length === 0;
+  }
 
-    // Проверяем, существует ли автомобиль с такой маркой и моделью
+  async create(dto: CreateApplicationDto) {
+    const {
+      userId,
+      carBrand,
+      carModel,
+      year,
+      description,
+      serviceIds,
+      date,
+      rememberCar,
+    } = dto;
+  
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`User with ID ${userId} not found`);
+  
+    // Учитываем не только марку и модель, но и год
     let car = await this.prisma.car.findFirst({
       where: {
         brand: carBrand,
         model: carModel,
+        year: year ?? new Date().getFullYear(), // ✅ учитываем год
+        ownerId: userId,
+        isDeleted: false, // 💡 на всякий случай
       },
     });
-
-    // Если автомобиль не найден, создаем новый
+  
+    // Если авто с такими параметрами не найдено — создаём
     if (!car) {
       car = await this.prisma.car.create({
         data: {
           brand: carBrand,
           model: carModel,
-          year: new Date().getFullYear(), // можно указать год создания или предложить клиенту добавить
-          ownerId: userId, // Привязываем автомобиль к пользователю
+          year: year ?? new Date().getFullYear(),
+          ownerId: userId,
+          remembered: rememberCar ?? false, // ✅ сохраняем только если флаг true
         },
       });
     }
-
-    // Получаем услуги
+  
+    // Проверка услуг
     const services = await this.prisma.service.findMany({
       where: { id: { in: serviceIds } },
     });
-
+  
     if (services.length !== serviceIds.length) {
-      throw new NotFoundException('Some services were not found');
+      throw new NotFoundException('Некоторые услуги не найдены');
     }
-
-    // Создаем заявку
+  
+    const totalDuration = services.reduce((sum, s) => sum + (s.duration || 0), 0);
+    const startDate = new Date(date);
+    const endDate = new Date(startDate.getTime() + totalDuration * 60 * 1000);
+  
+    // Проверка слота
+    const isAvailable = await this.isSlotAvailable(startDate, endDate);
+    if (!isAvailable) {
+      throw new BadRequestException('Выбранное время уже занято');
+    }
+  
     const application = await this.prisma.application.create({
       data: {
         userId,
-        carId: car.id, // Привязываем найденный или созданный автомобиль к заявке
+        carId: car.id,
         description,
-        status: 'pending', // Статус по умолчанию: ожидает подтверждения
+        status: 'pending',
+        startDate,
+        endDate,
         services: {
-          connect: serviceIds.map((id) => ({ id })), // Привязываем услуги
+          connect: serviceIds.map((id) => ({ id })),
         },
       },
       include: {
@@ -80,48 +118,129 @@ export class ApplicationService {
         car: true,
       },
     });
-
-    // Отправляем уведомление о статусе заявки через WebSocket
-    this.notificationGateway.sendApplicationStatusUpdate(application.id, application.status);
-
+  
+    await this.notificationGateway.sendApplicationStatusUpdate(
+      application.id,
+      application.status,
+    );
+  
     return application;
   }
-
-  // Обновление статуса заявки
-  async updateStatus(id: number, status: string) {
-    console.log(`Attempting to update status for application ID: ${id} to ${status}`);
   
-    // Проверка на допустимые статусы
-    const validStatuses = ['pending', 'approved', 'rejected']; // Список допустимых статусов
-    if (!validStatuses.includes(status)) {
-      throw new BadRequestException('Invalid status');
-    }
+
+  async updateStatus(id: number, status: string, employeeId?: number) {
+    const validManagerStatuses = ['pending', 'approved', 'rejected'];
+    const validWorkStatuses = ['WAITING', 'IN_PROGRESS', 'CHECK', 'READY'];
   
     const application = await this.prisma.application.findUnique({
       where: { id },
     });
   
     if (!application) {
-      console.error(`Application with ID ${id} not found`);
       throw new NotFoundException(`Application with ID ${id} not found`);
     }
   
-    console.log(`Found application: ${application.id} - Updating status to: ${status}`);
+    // Менеджер обновляет основной статус и назначает сотрудника
+    if (validManagerStatuses.includes(status)) {
+      const updated = await this.prisma.application.update({
+        where: { id },
+        data: {
+          status,
+          assignedEmployeeId: employeeId ?? undefined,
+        },
+        include: {
+          services: true,
+          user: true,
+          car: true,
+        },
+      });
   
-    // Обновляем статус заявки
-    const updatedApplication = await this.prisma.application.update({
-      where: { id },
-      data: { status },
-      include: {
-        services: true,
-        user: true,
-        car: true,
+      await this.notificationGateway.sendApplicationStatusUpdate(
+        updated.id,
+        updated.status,
+      );
+  
+      return updated;
+    }
+  
+    // Сотрудник обновляет только рабочий статус
+    if (validWorkStatuses.includes(status)) {
+      return this.prisma.application.update({
+        where: { id },
+        data: {
+          workStatus: status as WorkStatus,
+        },
+      });
+    }
+    
+  
+    throw new BadRequestException('Invalid status provided');
+  }
+  
+  
+
+  async assignEmployee(applicationId: number, employeeId: number) {
+    const employee = await this.prisma.user.findFirst({
+      where: {
+        id: employeeId,
+        role: 'SERVICE_EMPLOYEE',
       },
     });
   
-    // Отправляем уведомление о статусе заявки через WebSocket
-    this.notificationGateway.sendApplicationStatusUpdate(updatedApplication.id, updatedApplication.status);
+    if (!employee) {
+      throw new NotFoundException('Сотрудник не найден или не является сервисным мастером');
+    }
   
-    return updatedApplication;
+    const application = await this.prisma.application.update({
+      where: { id: applicationId },
+      data: {
+        assignedEmployeeId: employeeId,
+      },
+      include: {
+        user: true,
+        car: true,
+        services: true,
+      },
+    });
+  
+    return application;
   }
+  
+  async updateWorkStatus(applicationId: number, workStatus: 'WAITING' | 'IN_PROGRESS' | 'CHECK' | 'READY') {
+    return this.prisma.application.update({
+      where: { id: applicationId },
+      data: { workStatus },
+    });
+  }
+
+  async getApplicationsForEmployee(employeeId: number) {
+    return this.prisma.application.findMany({
+      where: { assignedEmployeeId: employeeId },
+      include: {
+        user: true,
+        car: true,
+        services: true,
+      },
+      orderBy: {
+        startDate: 'asc',
+      },
+    });
+    
+  }
+
+  async getByEmployee(employeeId: number) {
+  return this.prisma.application.findMany({
+    where: {
+      assignedEmployeeId: employeeId,
+    },
+    include: {
+      car: true,
+      services: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+
+  
 }

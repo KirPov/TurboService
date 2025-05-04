@@ -1,0 +1,21 @@
+[
+    { "brand": "Toyota", "models": ["Camry", "Corolla", "RAV4", "Hilux", "Yaris", "Land Cruiser", "Avensis", "Prius", "CHR", "Supra"] },
+    { "brand": "BMW", "models": ["X5", "X3", "3 Series", "5 Series", "7 Series", "1 Series", "M3", "M5", "i3", "i8"] },
+    { "brand": "Kia", "models": ["Rio", "Sportage", "Ceed", "Sorento", "Stinger", "Optima", "Soul", "Picanto", "Seltos", "Carens"] },
+    { "brand": "Mercedes-Benz", "models": ["C-Class", "E-Class", "S-Class", "GLA", "GLC", "GLE", "A-Class", "B-Class", "CLS", "Vito"] },
+    { "brand": "Audi", "models": ["A3", "A4", "A6", "Q5", "Q7", "A1", "A8", "Q2", "Q3", "TT"] },
+    { "brand": "Volkswagen", "models": ["Golf", "Passat", "Tiguan", "Polo", "Touareg", "Jetta", "Arteon", "T-Cross", "Up!", "Multivan"] },
+    { "brand": "Hyundai", "models": ["Elantra", "Tucson", "Sonata", "Santa Fe", "i30", "Accent", "Kona", "Creta", "Palisade", "Getz"] },
+    { "brand": "Honda", "models": ["Civic", "Accord", "CR-V", "HR-V", "Jazz", "Pilot", "Fit", "Odyssey", "Prelude", "Insight"] },
+    { "brand": "Ford", "models": ["Focus", "Mondeo", "Kuga", "Explorer", "Fiesta", "Escape", "Mustang", "Edge", "EcoSport", "Transit"] },
+    { "brand": "Mazda", "models": ["Mazda 3", "Mazda 6", "CX-5", "CX-30", "MX-5", "CX-3", "CX-9", "RX-8", "Mazda 2", "BT-50"] },
+    { "brand": "Nissan", "models": ["Qashqai", "X-Trail", "Juke", "Leaf", "Murano", "Micra", "Navara", "Altima", "Sentra", "Patrol"] },
+    { "brand": "Renault", "models": ["Logan", "Duster", "Sandero", "Kaptur", "Arkana", "Clio", "Megane", "Laguna", "Scenic", "Talisman"] },
+    { "brand": "Peugeot", "models": ["208", "308", "3008", "5008", "2008", "206", "207", "405", "406", "Partner"] },
+    { "brand": "Skoda", "models": ["Octavia", "Fabia", "Superb", "Kodiaq", "Karoq", "Scala", "Rapid", "Roomster", "Yeti", "Enyaq"] },
+    { "brand": "Chevrolet", "models": ["Cruze", "Aveo", "Captiva", "Tahoe", "Camaro", "Spark", "Malibu", "Trailblazer", "Orlando", "Blazer"] },
+    { "brand": "Lexus", "models": ["RX", "NX", "IS", "GS", "LS", "ES", "UX", "RC", "LC", "GX"] },
+    { "brand": "Subaru", "models": ["Impreza", "Forester", "Outback", "Legacy", "XV", "BRZ", "Ascent", "WRX", "Levorg", "Tribeca"] },
+    { "brand": "Mitsubishi", "models": ["Lancer", "Outlander", "Pajero", "ASX", "Galant", "Eclipse", "Mirage", "Delica", "Space Star", "Colt"] }
+  ]
+  

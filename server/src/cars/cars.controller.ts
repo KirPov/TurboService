@@ -1,7 +1,17 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UsePipes, ValidationPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  BadRequestException,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { CarsService } from './cars.service';
 import { CreateCarDto } from './dto/create-car.dto';
-
 import { Car } from '@prisma/client';
 
 @Controller('cars')
@@ -9,10 +19,15 @@ export class CarsController {
   constructor(private readonly carsService: CarsService) {}
 
   @Post()
-  @UsePipes(new ValidationPipe)
   create(@Body() createCarDto: CreateCarDto): Promise<Car> {
-    return this.carsService.create(createCarDto); // Передаем createCarDto с обязательным ownerId
+    return this.carsService.create(createCarDto);
   }
+
+  @Get('me')
+getMyCars(@Query('userId', ParseIntPipe) userId: number) {
+  return this.carsService.getRememberedCars(userId);
+}
+
 
   @Get()
   findAll() {
@@ -24,9 +39,14 @@ export class CarsController {
     return this.carsService.findOne(+id);
   }
 
-
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.carsService.remove(+id);
   }
+
+  @Patch(':id')
+softDelete(@Param('id') id: string) {
+  return this.carsService.remove(+id);
+}
+
 }

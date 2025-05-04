@@ -8,6 +8,7 @@ import { Role, User } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UserService {
@@ -82,6 +83,36 @@ export class UserService {
     return this.prisma.user.update({
       where: { id: id }, // Передаем id пользователя для поиска
       data: { role: newRole }, // Обновляем роль
+    });
+  }
+
+  async update(id: number, data: UpdateUserDto) {
+    return this.prisma.user.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async findById(id: number): Promise<User> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+  
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+  
+    return user;
+  }
+  
+  async getServiceEmployees() {
+    return this.prisma.user.findMany({
+      where: { role: 'SERVICE_EMPLOYEE' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
     });
   }
 }

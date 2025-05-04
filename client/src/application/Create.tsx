@@ -1,122 +1,225 @@
-import { FC, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { FC, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
-import { FaCarAlt, FaTools, FaCalendarAlt } from 'react-icons/fa';
+import { FaTools, FaCalendarAlt, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
+import DateTimePicker, { DateTimePickerRef } from './DateTimePicker';
+import CarAutoSelect from '../components/CarSelector';
+import { socket } from '../api/socket';
+import { useAuth } from '../hooks/userAuth';
+import ChatBox from '../components/ChatBox';
+
+interface Service {
+  id: number;
+  title: string;
+  duration: number;
+}
 
 const ApplicationCreate: FC = () => {
   const navigate = useNavigate();
+  const dateTimePickerRef = useRef<DateTimePickerRef>(null);
+
   const [description, setDescription] = useState('');
-  const [services, setServices] = useState<{ id: number; title: string }[]>([]); // Список услуг
-  const [selectedServices, setSelectedServices] = useState<number[]>([]); // Выбранные услуги
+  const [services, setServices] = useState<Service[]>([]);
+  const [selectedServices, setSelectedServices] = useState<number[]>([]);
   const [carBrand, setCarBrand] = useState('');
   const [carModel, setCarModel] = useState('');
+  const [carYear, setCarYear] = useState<number | null>(null);
+  const [rememberCar, setRememberCar] = useState(false);
+  const [selectedDateTime, setSelectedDateTime] = useState<{ start: string; end: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showServices, setShowServices] = useState(false);
+  const [applicationId, setApplicationId] = useState<number | null>(null);
+  const [isApproved, setIsApproved] = useState(false);
 
-  // Получаем доступные услуги с сервера
+  const { user } = useAuth();
+
+  const totalDuration = services
+    .filter((s) => selectedServices.includes(s.id))
+    .reduce((sum, s) => sum + (s.duration || 0), 0);
+
   const fetchServices = async () => {
     try {
       const res = await fetch('http://localhost:4100/api/service');
       const data = await res.json();
-      setServices(data); // тут список услуг
-    } catch (error) {
-      toast.error('Ошибка загрузки данных');
+      setServices(data);
+    } catch {
+      toast.error('Ошибка загрузки услуг');
     }
   };
 
-  useEffect(() => {
-    fetchServices(); // Загрузить услуги при монтировании компонента
-  }, []);
+  const fetchApplicationStatus = async (id: number) => {
+    try {
+      const res = await fetch(`http://localhost:4100/api/application/${id}`);
+      const data = await res.json();
+      setIsApproved(data.status === 'approved');
+    } catch (err) {
+      console.error('Ошибка при получении статуса заявки:', err);
+    }
+  };
 
-  // Обработчик отправки формы
   const submitHandler = async () => {
-    if (!description || !carBrand || !carModel || selectedServices.length === 0) {
+    if (!description || !carBrand || !carModel || selectedServices.length === 0 || !selectedDateTime || !carYear) {
       toast.error('Заполните все поля');
       return;
     }
 
     setLoading(true);
-
     try {
       const res = await fetch('http://localhost:4100/api/application', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 1, // здесь предполагается id пользователя, нужно будет передавать в реальном приложении
+          userId: user?.id,
           carBrand,
           carModel,
+          year: carYear,
           description,
           serviceIds: selectedServices,
+          date: selectedDateTime.start,
+          rememberCar,
         }),
       });
 
+      const result = await res.json();
+
       if (res.ok) {
-        toast.success('Заявка успешно отправлена. Ожидайте подтверждения.');
-        // Не редиректим на главную, оставляем пользователя на странице
+        toast.success('Заявка успешно отправлена');
+        setApplicationId(result.id);
+        localStorage.setItem('lastApplicationId', result.id.toString());
+        await fetchApplicationStatus(result.id);
+
+        setDescription('');
+        setCarBrand('');
+        setCarModel('');
+        setCarYear(null);
+        setSelectedServices([]);
+        setSelectedDateTime(null);
+        setRememberCar(false);
+        dateTimePickerRef.current?.refetchSlots();
       } else {
-        toast.error('Ошибка при отправке заявки');
+        toast.error(result.message || 'Ошибка при отправке заявки');
       }
-    } catch (error) {
-      toast.error('Ошибка при отправке заявки');
+    } catch {
+      toast.error('Ошибка при отправке');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchServices();
+
+    const lastId = localStorage.getItem('lastApplicationId');
+    if (lastId) {
+      const id = parseInt(lastId);
+      setApplicationId(id);
+      fetchApplicationStatus(id);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleStatusUpdate = (data: { applicationId: number; status: string }) => {
+      if (data.applicationId === applicationId && data.status === 'approved') {
+        toast.info('Заявка подтверждена!');
+        setIsApproved(true);
+      }
+    };
+
+    socket.on('applicationStatusUpdate', handleStatusUpdate);
+    return () => {
+      socket.off('applicationStatusUpdate', handleStatusUpdate);
+    };
+  }, [applicationId]);
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <section className="relative py-20 overflow-hidden">
-        <div className="container mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
-            className="lg:w-1/2 mb-12 lg:mb-0"
-          >
-            <h1 className="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent">
-              Создание заявки на ремонт
-            </h1>
-            <p className="text-lg text-gray-300 mb-8">
-              Заполните форму, чтобы отправить заявку на ремонт вашего автомобиля.
-            </p>
-            <div className="space-y-4">
-              <div>
-                <input
-                  type="text"
-                  placeholder="Марка автомобиля"
-                  value={carBrand}
-                  onChange={(e) => setCarBrand(e.target.value)}
-                  className="w-full px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
-              </div>
-              <div>
-                <input
-                  type="text"
-                  placeholder="Модель автомобиля"
-                  value={carModel}
-                  onChange={(e) => setCarModel(e.target.value)}
-                  className="w-full px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
-              </div>
-              <div>
-                <textarea
-                  placeholder="Описание проблемы"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full h-32 px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-center text-cyan-400 mb-4">
-                  Выберите услуги
+    <div className="min-h-screen bg-gray-900 text-white py-16 px-4">
+      <div className="max-w-5xl mx-auto bg-gray-800 rounded-xl shadow-lg p-8 space-y-8 border border-gray-700">
+        <motion.h1
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-3xl md:text-4xl font-bold text-center bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent"
+        >
+          Создание заявки на ремонт
+        </motion.h1>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-6">
+            <CarAutoSelect
+              onCarSelected={(brand, model) => {
+                setCarBrand(brand);
+                setCarModel(model);
+              }}
+              initialBrand={carBrand}
+              initialModel={carModel}
+            />
+
+            <div>
+              <label className="block text-sm mb-1 text-gray-300">Год выпуска</label>
+              <input
+                type="number"
+                value={carYear ?? ''}
+                onChange={(e) => {
+                  const year = parseInt(e.target.value, 10);
+                  setCarYear(!isNaN(year) ? year : null);
+                }}
+                placeholder="Например: 2015"
+                className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded"
+                min={1950}
+                max={new Date().getFullYear()}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm mb-1 text-gray-300">Описание проблемы</label>
+              <textarea
+                placeholder="Например: стук в подвеске..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full h-32 px-4 py-2 bg-gray-700 text-white border border-gray-600 rounded-lg resize-none"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2 pt-1">
+              <input
+                id="rememberCar"
+                type="checkbox"
+                checked={rememberCar}
+                onChange={(e) => setRememberCar(e.target.checked)}
+                className="accent-cyan-500"
+              />
+              <label htmlFor="rememberCar" className="text-sm text-gray-300">
+                Запомнить автомобиль
+              </label>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <div
+                className="flex justify-between items-center cursor-pointer text-cyan-400 hover:text-cyan-300 transition-colors mb-2"
+                onClick={() => setShowServices(!showServices)}
+              >
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <FaTools /> Выберите услуги
                 </h3>
-                <div className="space-y-2">
+                {showServices ? <FaChevronUp /> : <FaChevronDown />}
+              </div>
+
+              <motion.div
+                initial={false}
+                animate={{ height: showServices ? 'auto' : 0, opacity: showServices ? 1 : 0 }}
+                transition={{ duration: 0.3 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-2">
                   {services.map((service) => (
                     <motion.div
                       key={service.id}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="flex items-center space-x-4"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="flex items-center space-x-3"
                     >
                       <input
                         type="checkbox"
@@ -126,36 +229,67 @@ const ApplicationCreate: FC = () => {
                           if (e.target.checked) {
                             setSelectedServices([...selectedServices, service.id]);
                           } else {
-                            setSelectedServices(
-                              selectedServices.filter((id) => id !== service.id),
-                            );
+                            setSelectedServices(selectedServices.filter((id) => id !== service.id));
                           }
                         }}
-                        className="text-cyan-500 focus:ring-2 focus:ring-cyan-500"
+                        checked={selectedServices.includes(service.id)}
+                        className="text-cyan-500"
                       />
-                      <label
-                        htmlFor={`service-${service.id}`}
-                        className="text-lg text-gray-300"
-                      >
+                      <label htmlFor={`service-${service.id}`} className="text-gray-300">
                         {service.title}
+                        <span className="ml-2 text-sm text-gray-400">({service.duration} мин)</span>
                       </label>
                     </motion.div>
                   ))}
                 </div>
-              </div>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={submitHandler}
-                disabled={loading}
-                className="w-full px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600 rounded-lg font-medium text-white flex items-center justify-center"
-              >
-                {loading ? 'Отправка...' : 'Отправить заявку'}
-              </motion.button>
+
+                {totalDuration > 0 && (
+                  <div className="mt-3 space-y-1">
+                    <div className="text-sm text-gray-400">
+                      Итого: <span className="text-white font-semibold">{totalDuration} мин</span>
+                    </div>
+                    <div className="w-full h-3 bg-gray-600 rounded">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(totalDuration, 180) / 180 * 100}%` }}
+                        transition={{ duration: 0.5 }}
+                        className={`h-full rounded ${
+                          totalDuration <= 60
+                            ? 'bg-green-500'
+                            : totalDuration <= 120
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                )}
+              </motion.div>
             </div>
-          </motion.div>
+
+            <div>
+              <h3 className="text-lg font-semibold text-cyan-400 flex items-center gap-2 mb-2">
+                <FaCalendarAlt /> Дата и время
+              </h3>
+              <DateTimePicker
+                ref={dateTimePickerRef}
+                services={services.filter((s) => selectedServices.includes(s.id))}
+                onDateTimeSelected={(start, end) => setSelectedDateTime({ start, end })}
+              />
+            </div>
+          </div>
         </div>
-      </section>
+
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={submitHandler}
+          disabled={loading}
+          className="w-full md:w-1/2 mx-auto block px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600 rounded-lg font-medium text-white text-center mt-8"
+        >
+          {loading ? 'Отправка...' : 'Отправить заявку'}
+        </motion.button>
+      </div>
     </div>
   );
 };

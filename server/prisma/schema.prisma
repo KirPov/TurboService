@@ -14,14 +14,27 @@ enum Role {
   SERVICE_EMPLOYEE
 }
 
+enum WorkStatus {
+  WAITING
+  IN_PROGRESS
+  CHECK
+  READY
+}
+
 model User {
-  id           Int           @id @default(autoincrement())
-  email        String        @unique
-  password     String
-  CreatedAt    DateTime      @default(now())
-  role         Role          @default(CLIENT)
-  cars         Car[]
-  applications Application[]
+  id                      Int           @id @default(autoincrement())
+  email                   String        @unique
+  password                String
+  name                    String?
+  phone                   String?
+  CreatedAt               DateTime      @default(now())
+  role                    Role          @default(CLIENT)
+
+  cars                    Car[]
+  applications            Application[]            @relation("UserApplications")
+  assignedApplications    Application[]            @relation("EmployeeApplications")
+  sentMessages     ChatMessage[] @relation("SentMessages")
+  receivedMessages ChatMessage[] @relation("ReceivedMessages")
 
   @@map("users")
 }
@@ -32,26 +45,36 @@ model Car {
   model        String
   year         Int
   ownerId      Int
-  applications Application[]
+  isDeleted    Boolean       @default(false)
+  remembered   Boolean       @default(false)
   createdAt    DateTime      @default(now())
+
+  applications Application[]
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@map("cars")
 }
 
 model Application {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  carId       Int
-  description String
-  status      String   @default("pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  Int           @id @default(autoincrement())
+  userId              Int
+  carId               Int
+  description         String
+  status              String        @default("pending")
+  workStatus          WorkStatus?   // 👈 Текущий этап выполнения (только если назначено)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  startDate           DateTime
+  endDate             DateTime
 
-  user                User                 @relation(fields: [userId], references: [id])
-  car                 Car                  @relation(fields: [carId], references: [id])
-  services            Service[] // связь многие ко многим с услугами
-  applicationServices ApplicationService[] // обратная связь для промежуточной таблицы
+  assignedEmployeeId  Int?          // 👈 назначенный сотрудник
+  assignedEmployee    User?         @relation("EmployeeApplications", fields: [assignedEmployeeId], references: [id])
+  user                User          @relation("UserApplications", fields: [userId], references: [id])
+  car                 Car           @relation(fields: [carId], references: [id])
+
+  chatMessages ChatMessage[]
+  services            Service[]
+  applicationServices ApplicationService[]
 
   @@map("applications")
 }
@@ -61,8 +84,10 @@ model Service {
   title               String
   description         String
   price               Int
-  applications        Application[] // связь многие ко многим с заявками
-  applicationServices ApplicationService[] // обратная связь для промежуточной таблицы
+  duration            Int
+
+  applications        Application[]
+  applicationServices ApplicationService[]
 
   @@map("services")
 }
@@ -74,13 +99,19 @@ model ApplicationService {
   application Application @relation(fields: [applicationId], references: [id])
   service     Service     @relation(fields: [serviceId], references: [id])
 
-  @@id([applicationId, serviceId]) // составной первичный ключ
+  @@id([applicationId, serviceId])
   @@map("application_services")
 }
 
-enum EnumUserRole {
-  ADMIN
-  MANAGER
-  CLIENT
-  SERVICE_EMPLOYEE
+model ChatMessage {
+  id         Int      @id @default(autoincrement())
+  senderId   Int
+  receiverId Int
+  text       String
+  createdAt  DateTime @default(now())
+  applicationId  Int
+
+  application    Application @relation(fields: [applicationId], references: [id])
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
 }

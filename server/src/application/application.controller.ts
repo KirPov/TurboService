@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApplicationService } from './application.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 
+
 @Controller('application')
 export class ApplicationController {
   constructor(private readonly applicationService: ApplicationService) {}
@@ -19,29 +20,45 @@ export class ApplicationController {
   }
 
   @Patch(':id/status')
-  async updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    const applicationId = parseInt(id, 10); // Преобразуем строку в число
-    console.log(
-      `Updating status for application ID: ${applicationId} to ${status}`,
-    );
-
-    try {
-      // Проверяем параметры
-      if (!applicationId || isNaN(applicationId)) {
-        console.log('Invalid id');
-        throw new Error('Invalid ID');
-      }
-
-      const result = await this.applicationService.updateStatus(
-        applicationId,
-        status,
-      );
-      console.log('Status updated successfully:', result);
-
-      return result;
-    } catch (error) {
-      console.error('Error updating status:', error);
-      throw new Error(`Failed to update status: ${error.message}`);
-    }
+  async updateStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string; employeeId?: number }
+  ) {
+    const applicationId = parseInt(id, 10);
+  
+    const { status, employeeId } = body;
+  
+    return this.applicationService.updateStatus(applicationId, status, employeeId);
   }
+  
+
+  @Patch(':id/assign/:employeeId')
+assignEmployee(
+  @Param('id') id: string,
+  @Param('employeeId') employeeId: string,
+) {
+  return this.applicationService.assignEmployee(+id, +employeeId);
+}
+
+@Patch(':id/work-status')
+updateWorkStatus(
+  @Param('id') id: string,
+  @Body('workStatus') workStatus: 'WAITING' | 'IN_PROGRESS' | 'CHECK' | 'READY',
+) {
+  return this.applicationService.updateWorkStatus(+id, workStatus);
+}
+
+@Get('assigned/:employeeId')
+getApplicationsForEmployee(@Param('employeeId') id: string) {
+  return this.applicationService.getApplicationsForEmployee(+id);
+}
+
+@Get('employee/:id')
+getByEmployee(@Param('id') id: string) {
+  return this.applicationService.getByEmployee(+id);
+}
+
+
+
+  
 }

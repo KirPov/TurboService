@@ -1,13 +1,21 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateApplicationDto } from './create-application.dto';
-import { IsIn } from 'class-validator';
+import { IsOptional, IsIn } from 'class-validator';
 
 export class UpdateApplicationDto extends PartialType(CreateApplicationDto) {
-    @IsIn(['pending', 'in_progress', 'completed'], {
-        message: 'Статус должен быть одним из: pending, in_progress, completed',
-      })
-    status: string;
-    description?: string; // Новое описание заявки
+  @IsOptional()
+  @IsIn(['pending', 'approved', 'rejected', 'WAITING', 'IN_PROGRESS', 'CHECK', 'READY'], {
+    message:
+      'Статус должен быть одним из: pending, approved, rejected, WAITING, IN_PROGRESS, CHECK, READY',
+  })
+  status?: string;
 
-    serviceIds?: number[]; // Новый список ID услуг
+  @IsOptional()
+  description?: string;
+
+  @IsOptional()
+  serviceIds?: number[];
+
+  @IsOptional()
+  assignedEmployeeId?: number;
 }

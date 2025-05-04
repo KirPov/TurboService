@@ -13,6 +13,7 @@ export class ServiceService {
         title: data.title,
         description: data.description,
         price: data.price,
+        duration: data.duration, // ← добавлено
       },
     });
   }

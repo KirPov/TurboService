@@ -7,6 +7,10 @@ import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
 import { ServiceModule } from './service/service.module';
 import { UserModule } from './user/user.module';
+import { SlotModule } from './slots/slots.module';
+import { ChatModule } from './chat/chat.module';
+
+
 
 @Module({
   imports: [
@@ -17,6 +21,8 @@ import { UserModule } from './user/user.module';
     PrismaModule,
     ServiceModule,
     ApplicationModule,
+    SlotModule,
+    ChatModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],

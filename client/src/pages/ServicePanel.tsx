@@ -1,101 +1,249 @@
-// src/pages/ServiceEmployeePanel.tsx
-
-import { FaTools, FaCar, FaCalendarAlt } from 'react-icons/fa';
+import { useEffect, useState } from 'react';
+import { FaTools, FaCar, FaCheckCircle, FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import { useAuth } from '../hooks/userAuth';
+import { instance } from '../api/axios.api';
+import { toast } from 'react-toastify';
+
+interface Application {
+  id: number;
+  description: string;
+  workStatus: 'WAITING' | 'IN_PROGRESS' | 'CHECK' | 'READY';
+  startDate: string;
+  car: {
+    brand: string;
+    model: string;
+    year?: number;
+  };
+  createdAt: string;
+  services: {
+    title: string;
+  }[];
+}
+
+const statusOptions = ['WAITING', 'IN_PROGRESS', 'CHECK', 'READY'];
+
+const statusLabels: Record<string, string> = {
+  WAITING: 'Ожидает выполнения',
+  IN_PROGRESS: 'Выполняются работы',
+  CHECK: 'Проверка',
+  READY: 'Готово к выдаче',
+};
+
+const statusColors: Record<string, string> = {
+  WAITING: 'bg-yellow-100 text-yellow-800',
+  IN_PROGRESS: 'bg-blue-100 text-blue-800',
+  CHECK: 'bg-purple-100 text-purple-800',
+  READY: 'bg-green-100 text-green-800',
+};
 
 export default function ServiceEmployeePanel() {
   const { user } = useAuth();
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [currentDate, setCurrentDate] = useState(new Date());
 
-  // Пример данных о текущих задачах
-  const tasks = [
-    { id: 1, car: 'Toyota Camry', problem: 'Замена масла', status: 'В работе' },
-    { id: 2, car: 'Honda Civic', problem: 'Диагностика', status: 'Ожидает' }
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await instance.get(`/application/employee/${user?.id}`);
+        const sorted = res.data.sort(
+          (a: Application, b: Application) =>
+            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+        );
+        setApplications(sorted);
+      } catch (err) {
+        toast.error('Ошибка загрузки заявок');
+      }
+    };
+    if (user?.id) fetchData();
+  }, [user?.id]);
+
+  const handleStatusChange = async (id: number, newStatus: Application['workStatus']) => {
+    const currentApp = applications.find((a) => a.id === id);
+    if (!currentApp) return;
+
+    const currentIndex = statusOptions.indexOf(currentApp.workStatus);
+    const nextIndex = statusOptions.indexOf(newStatus);
+
+    if (nextIndex <= currentIndex) {
+      toast.warning('Нельзя откатиться на предыдущий статус');
+      return;
+    }
+
+    const confirmChange = confirm(`Подтвердить переход на статус "${statusLabels[newStatus]}"?`);
+    if (!confirmChange) return;
+
+    try {
+      await instance.patch(`/application/${id}/work-status`, { workStatus: newStatus });
+      setApplications((prev) =>
+        prev.map((app) => (app.id === id ? { ...app, workStatus: newStatus } : app))
+      );
+      toast.success('Статус обновлён');
+    } catch (err) {
+      toast.error('Ошибка обновления статуса');
+    }
+  };
+
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+  const isSameDay = (date1: Date, date2: Date) => {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  };
+
+  const activeApps = applications.filter((app) => {
+    const appDate = new Date(app.startDate);
+    return app.workStatus !== 'READY' && isSameDay(appDate, currentDate);
+  });
+
+  const historyApps = applications.filter(
+    (app) =>
+      app.workStatus === 'READY' &&
+      new Date(app.startDate).getTime() >= oneMonthAgo.getTime()
+  );
+
+  const goToPrevDay = () => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(currentDate.getDate() - 1);
+    setCurrentDate(newDate);
+  };
+
+  const goToNextDay = () => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(currentDate.getDate() + 1);
+    setCurrentDate(newDate);
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Заголовок */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 flex items-center">
-            <FaTools className="mr-2 text-blue-500" />
-            Панель сотрудника сервиса
+      <div className="max-w-6xl mx-auto space-y-10">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center mb-2">
+            <FaTools className="mr-2 text-blue-500" /> Панель сотрудника сервиса
           </h1>
-          <p className="text-gray-600 mt-2">
-            Добро пожаловать, <span className="font-semibold text-blue-600">{user?.email}</span>
+          <p className="text-gray-600">
+            Добро пожаловать, <span className="text-blue-600 font-semibold">{user?.email}</span>
           </p>
         </div>
 
-        {/* Основной контент */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Карточка текущих задач */}
-          <div className="bg-white rounded-lg shadow p-6 col-span-2">
-            <h2 className="text-xl font-semibold mb-4 flex items-center">
-              <FaCar className="mr-2 text-green-500" />
-              Текущие задания
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Автомобиль</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Проблема</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {tasks.map((task) => (
-                    <tr key={task.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.id}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{task.car}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.problem}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          task.status === 'В работе' 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {task.status}
+        <div>
+          <h2 className="text-xl font-bold mb-4">Заявки на {currentDate.toLocaleDateString()}</h2>
+          <div className="flex justify-between mb-4">
+            <button onClick={goToPrevDay} className="text-sm text-blue-600 flex items-center">
+              <FaArrowLeft className="mr-1" /> Предыдущий день
+            </button>
+            <button onClick={goToNextDay} className="text-sm text-blue-600 flex items-center">
+              Следующий день <FaArrowRight className="ml-1" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {activeApps.length === 0 ? (
+              <p className="text-gray-500">Нет активных заявок на выбранный день</p>
+            ) : (
+              activeApps.map((app) => (
+                <div
+                  key={app.id}
+                  className="bg-white rounded-lg shadow-md p-4 border border-gray-200 hover:border-blue-400 transition-all"
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center">
+                      <FaCar className="mr-2 text-green-600" />
+                      {app.car.brand} {app.car.model}
+                      {app.car.year && (
+                        <span className="ml-2 text-sm text-gray-500 font-normal">
+                          ({app.car.year})
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      )}
+                    </h2>
+                    <span className="text-sm text-gray-400">#{app.id}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-1">{app.description}</p>
+                  <div className="text-sm text-gray-500 mb-1">
+                    Услуги:{' '}
+                    <span className="text-gray-700 font-medium">
+                      {app.services.map((s) => s.title).join(', ')}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-500 mb-2">
+                    Время начала: {new Date(app.startDate).toLocaleString()}
+                  </div>
+                  <div className="text-sm font-medium mb-2">
+                    <span className="text-gray-600 mr-1">Статус:</span>
+                    <span className={`px-2 py-1 rounded ${statusColors[app.workStatus]}`}>
+                      {statusLabels[app.workStatus]}
+                    </span>
+                  </div>
+                  <select
+                    value=""
+                    className="w-full mt-2 border px-3 py-2 rounded bg-white text-gray-800"
+                    onChange={(e) =>
+                      handleStatusChange(app.id, e.target.value as Application['workStatus'])
+                    }
+                  >
+                    <option value="" disabled>
+                      Изменить статус
+                    </option>
+                    {statusOptions.map(
+                      (option) =>
+                        statusOptions.indexOf(option) >
+                          statusOptions.indexOf(app.workStatus) && (
+                          <option key={option} value={option}>
+                            {statusLabels[option]}
+                          </option>
+                        )
+                    )}
+                  </select>
+                </div>
+              ))
+            )}
           </div>
+        </div>
 
-          {/* Карточка быстрых действий */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center">
-              <FaCalendarAlt className="mr-2 text-purple-500" />
-              Быстрые действия
-            </h2>
-            <div className="space-y-3">
-              <button className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded flex items-center justify-center">
-                <FaTools className="mr-2" />
-                Новая диагностика
-              </button>
-              <button className="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded flex items-center justify-center">
-                <FaCar className="mr-2" />
-                Завершить работу
-              </button>
+        <div>
+          <h2 className="text-xl font-bold mb-4 flex items-center text-green-700">
+            <FaCheckCircle className="mr-2" /> История заявок за месяц
+          </h2>
+          {historyApps.length === 0 ? (
+            <p className="text-gray-500">Нет завершённых заявок за последний месяц</p>
+          ) : (
+            <div className="space-y-4">
+              {historyApps.map((app) => (
+                <div
+                  key={app.id}
+                  className="bg-white rounded-lg shadow-sm p-4 border border-gray-200"
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <h2 className="text-lg font-bold text-gray-800">
+                      {app.car.brand} {app.car.model}
+                      {app.car.year && (
+                        <span className="ml-2 text-sm text-gray-500 font-normal">
+                          ({app.car.year})
+                        </span>
+                      )}
+                    </h2>
+                    <span className="text-sm text-gray-400">#{app.id}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-1">{app.description}</p>
+                  <div className="text-sm mb-1 text-gray-500">
+                    Услуги:{' '}
+                    <span className="text-gray-700 font-medium">
+                      {app.services.map((s) => s.title).join(', ')}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-500">Завершено: {new Date(app.startDate).toLocaleString()}</div>
+                  <div
+                    className={`text-sm font-medium ${statusColors[app.workStatus]} px-2 py-1 rounded mt-2 inline-block`}
+                  >
+                    {statusLabels[app.workStatus]}
+                  </div>
+                </div>
+              ))}
             </div>
-
-            {/* Статистика */}
-            <div className="mt-6 pt-4 border-t border-gray-200">
-              <h3 className="font-medium text-gray-700 mb-2">Ваша статистика</h3>
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Выполнено сегодня:</span>
-                <span className="font-semibold">3</span>
-              </div>
-              <div className="flex justify-between text-sm text-gray-600 mt-1">
-                <span>В работе:</span>
-                <span className="font-semibold">2</span>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

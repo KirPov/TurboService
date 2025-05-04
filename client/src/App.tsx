@@ -24,9 +24,8 @@ function App() {
 
     try {
       const profileData = await AuthService.getProfile();
-      const profile = profileData[0];
 
-      if (!profile || !profile.id || !profile.email || !profile.role) {
+      if (!user || !user.id || !user.email || !user.role) {
         throw new Error("Невалидный профиль");
       }
 
@@ -35,9 +34,11 @@ function App() {
         login({
           token: token,
           user: {
-            id: profile.id,
-            email: profile.email,
-            role: profile.role,
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            name: "",
+            phone: ""
           },
         })
       );

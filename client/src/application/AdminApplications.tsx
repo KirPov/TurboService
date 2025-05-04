@@ -1,139 +1,207 @@
-import { useEffect, useState } from "react";
-import { io } from "socket.io-client";
+import { useEffect, useState } from 'react';
+import { instance } from '../api/axios.api';
+import { socket } from '../api/socket';
+import { FaCheck, FaTimes } from 'react-icons/fa';
+import ChatBox from '../components/ChatBox';
+import React from 'react';
+import { useAuth } from '../hooks/userAuth';
 
-// Типизация заявки
 interface Application {
   id: number;
   description: string;
-  status: string;
+  status: 'pending' | 'approved' | 'rejected';
+  workStatus: 'WAITING' | 'IN_PROGRESS' | 'CHECK' | 'READY';
+  assignedEmployeeId?: number;
+  user: {
+    id: number;
+    email: string;
+    name?: string;
+    phone?: string;
+  };
 }
 
-const AdminApplications = () => {
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+interface Employee {
+  id: number;
+  name: string | null;
+  email: string;
+}
 
-  const socket = io("http://localhost:4100"); // Подключаемся к WebSocket серверу
+export default function AdminApplications() {
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const { user } = useAuth();
+  const [openChats, setOpenChats] = useState<Record<number, boolean>>({});
+  const [clientMessageExists, setClientMessageExists] = useState<Record<number, boolean>>({});
+
+  const toggleChat = (id: number) => {
+    setOpenChats(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   useEffect(() => {
-    socket.on(
-      "applicationStatusUpdate",
-      (data: { applicationId: number; status: string }) => {
-        // Когда приходит событие о статусе заявки, сразу обновляем её статус в UI
-        setApplications((prevApps) =>
-          prevApps.map((app) =>
-            app.id === data.applicationId
-              ? { ...app, status: data.status }
-              : app
-          )
-        );
-      }
-    );
+    const fetchData = async () => {
+      try {
+        const appsRes = await instance.get('/application');
+        const empsRes = await instance.get('/user/employees');
+        const apps = appsRes.data;
+        setApplications(apps);
+        setEmployees(empsRes.data);
 
+        for (const app of apps) {
+          if (app.status === 'approved') {
+            const res = await instance.get(`/chat/has-client-message`, {
+              params: {
+                clientId: app.user.id,
+                peerId: user?.id,
+                applicationId: app.id
+              }
+            });
+            setClientMessageExists(prev => ({ ...prev, [app.id]: res.data.hasMessage }));
+          }
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке заявок, сотрудников или истории чатов:', error);
+      }
+    };
+    if (user?.id) fetchData();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const handleStatusUpdate = (data: { applicationId: number; status: string }) => {
+      setApplications((prev) =>
+        prev.map((app) =>
+          app.id === data.applicationId
+            ? { ...app, status: data.status as any }
+            : app
+        )
+      );
+    };
+    socket.on('applicationStatusUpdate', handleStatusUpdate);
     return () => {
-      socket.off("applicationStatusUpdate");
+      socket.off('applicationStatusUpdate', handleStatusUpdate);
     };
   }, []);
 
-  const fetchApplications = async () => {
+  const handleStatusChange = async (
+    id: number,
+    status: 'approved' | 'rejected',
+    employeeId?: number
+  ) => {
     try {
-      const res = await fetch("http://localhost:4100/api/application");
-      if (!res.ok) {
-        throw new Error("Ошибка при загрузке заявок");
-      }
-      const data: Application[] = await res.json();
-      setApplications(data);
+      await instance.patch(`/application/${id}/status`, { status, employeeId });
     } catch (error) {
-      console.error("Ошибка при загрузке заявок: ", error);
-    } finally {
-      setLoading(false);
+      console.error('Ошибка изменения статуса:', error);
     }
   };
 
-  const changeStatus = async (id: number, status: string) => {
-    try {
-      const res = await fetch(
-        `http://localhost:4100/api/application/${id}/status`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status }),
-        }
-      );
-
-      if (res.ok) {
-        console.log(
-          `Статус для заявки ID: ${id} успешно изменен на: ${status}`
-        );
-      } else {
-        throw new Error("Ошибка при изменении статуса заявки");
-      }
-    } catch (error) {
-      console.error("Ошибка при изменении статуса заявки: ", error);
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending': return 'Ожидает подтверждения';
+      case 'approved': return 'Подтверждена';
+      case 'rejected': return 'Отклонена';
+      default: return status;
     }
   };
-
-  useEffect(() => {
-    fetchApplications();
-  }, []);
-
-  if (loading) return <div className="text-center p-4">Загрузка...</div>;
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6 text-white">
       <h1 className="text-2xl font-bold mb-4">Заявки</h1>
-      <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
+      <div className="overflow-x-auto bg-gray-800 rounded-lg shadow-lg">
         <table className="min-w-full table-auto">
-          <thead>
-            <tr className="bg-gray-200 text-left">
-              <th className="px-4 py-2">ID</th>
-              <th className="px-4 py-2">Описание</th>
-              <th className="px-4 py-2">Статус</th>
-              <th className="px-4 py-2">Действия</th>
+          <thead className="bg-gray-900 text-white">
+            <tr>
+              <th className="px-4 py-2 text-left">ID</th>
+              <th className="px-4 py-2 text-left">Описание</th>
+              <th className="px-4 py-2 text-left">Статус</th>
+              <th className="px-4 py-2 text-left">Сотрудник</th>
+              <th className="px-4 py-2 text-left">Действия</th>
             </tr>
           </thead>
           <tbody>
             {applications.map((app) => (
-              <tr key={app.id} className="border-t hover:bg-gray-50">
-                <td className="px-4 py-2">{app.id}</td>
-                <td className="px-4 py-2">{app.description}</td>
-                <td className="px-4 py-2">
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-sm ${
-                      app.status === "pending"
-                        ? "bg-yellow-400 text-black"
-                        : app.status === "approved"
-                        ? "bg-green-400 text-white"
-                        : "bg-red-400 text-white"
-                    }`}
-                  >
-                    {app.status}
-                  </span>
-                </td>
-                <td className="px-4 py-2 flex space-x-2">
-                  {app.status === "pending" && (
-                    <>
-                      <button
-                        onClick={() => changeStatus(app.id, "approved")}
-                        className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                      >
-                        Подтвердить
-                      </button>
-                      <button
-                        onClick={() => changeStatus(app.id, "rejected")}
-                        className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-                      >
-                        Отклонить
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
+              <React.Fragment key={app.id}>
+                <tr className="border-t border-gray-700 hover:bg-gray-700">
+                  <td className="px-4 py-2">{app.id}</td>
+                  <td className="px-4 py-2">{app.description || '—'}</td>
+                  <td className="px-4 py-2">{getStatusLabel(app.status)}</td>
+                  <td className="px-4 py-2">
+                    <select
+                      disabled={app.status !== 'pending'}
+                      value={app.assignedEmployeeId ?? ''}
+                      onChange={(e) =>
+                        setApplications((prev) =>
+                          prev.map((a) =>
+                            a.id === app.id
+                              ? { ...a, assignedEmployeeId: +e.target.value }
+                              : a
+                          )
+                        )
+                      }
+                      className="bg-gray-900 border border-gray-600 text-white rounded px-2 py-1 w-full"
+                    >
+                      <option value="">Не выбрано</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name || emp.email}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-2 flex gap-2">
+                    {app.status === 'pending' && (
+                      <>
+                        <button
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded disabled:opacity-50"
+                          disabled={!app.assignedEmployeeId}
+                          onClick={() => handleStatusChange(app.id, 'approved', app.assignedEmployeeId)}
+                        >
+                          <FaCheck />
+                        </button>
+                        <button
+                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded"
+                          onClick={() => handleStatusChange(app.id, 'rejected')}
+                        >
+                          <FaTimes />
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+                <tr className="bg-gray-900">
+                  <td colSpan={5} className="px-4 py-4">
+                    <p className="text-sm text-cyan-400 mb-1">
+                      Клиент: {app.user.name || 'Не указано'} ({app.user.email})
+                    </p>
+                    <p className="text-sm text-gray-400 mb-2">
+                      Телефон: {app.user.phone || 'Не указано'}
+                    </p>
+
+                    {user?.id && app.status === 'approved' && clientMessageExists[app.id] && app.workStatus !== 'READY' && (
+                      <ChatBox peerId={app.user.id} applicationId={app.id} />
+                    )}
+
+                    {user?.id && app.status === 'approved' && clientMessageExists[app.id] && app.workStatus === 'READY' && (
+                      <div>
+                        <button
+                          onClick={() => toggleChat(app.id)}
+                          className="text-sm text-cyan-400 hover:text-cyan-300"
+                        >
+                          {openChats[app.id] ? 'Скрыть чат' : 'Показать чат'}
+                        </button>
+
+                        {openChats[app.id] && (
+                          <div className="mt-3">
+                            <ChatBox peerId={app.user.id} applicationId={app.id} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              </React.Fragment>
             ))}
           </tbody>
         </table>
       </div>
     </div>
   );
-};
-
-export default AdminApplications;
+}

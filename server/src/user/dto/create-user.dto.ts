@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsNotEmpty,
   IsOptional,
+  IsString,
   MinLength,
 } from 'class-validator';
 
@@ -20,4 +21,12 @@ export class CreateUserDto {
     message: `Role must be one of: ${Object.values(Role).join(', ')}`,
   })
   role?: Role; // Опциональное поле с валидацией
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
 }

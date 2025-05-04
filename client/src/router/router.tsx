@@ -9,6 +9,7 @@ import Layout from "../pages/Layout";
 import Profile from "../pages/Profile";
 import ServiceEmployeePanel from "../pages/ServicePanel";
 import { ProtectedRoute } from "./protectedRoute";
+import ManagerSchedule from "../components/ManagerSchedule";
 
 export const router = createBrowserRouter([
   {
@@ -56,6 +57,16 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+
+      {
+        path: "manager/schedule",
+        element: (
+          <ProtectedRoute allowedRoles={["MANAGER"]}>
+            <ManagerSchedule />
+          </ProtectedRoute>
+        ),
+      },
+      
     ],
   },
 ]);

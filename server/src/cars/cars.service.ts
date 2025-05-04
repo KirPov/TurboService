@@ -38,9 +38,24 @@ export class CarsService {
     });
   }
 
- async remove(id: number): Promise<Car> {
-    return this.prisma.car.delete({
-      where: { id },
+
+  async getRememberedCars(userId: number) {
+    return this.prisma.car.findMany({
+      where: {
+        ownerId: userId,
+        remembered: true,
+        isDeleted: false, // ✅ фильтрация
+      },
     });
   }
+  
+  
+  async remove(id: number): Promise<Car> {
+    return this.prisma.car.update({
+      where: { id },
+      data: { isDeleted: true }, // ✅ мягкое удаление
+    });
+  }
+  
+  
 }

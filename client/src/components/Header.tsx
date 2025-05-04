@@ -7,12 +7,10 @@ import { useAppDispatch } from '../store/hooks';
 import { logout } from '../store/user/userSlice';
 import { removeTokenFromLocalStorage, removeUserFromLocalStorage } from '../helpers/localstorage.helper';
 import { toast } from 'react-toastify';
-import { useSelector } from 'react-redux';
-import { RootState } from '../store/store';
 
 const Header: FC = () => {
-  const { isAuth, user } = useAuth(); // Деструктурируем isAuth и user из хука
-  const role = user?.role; // Получаем роль пользователя
+  const { isAuth, user } = useAuth();
+  const role = user?.role;
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
 
@@ -21,24 +19,20 @@ const Header: FC = () => {
     removeTokenFromLocalStorage('token');
     removeUserFromLocalStorage();
     toast.success('Вы успешно вышли');
-
-    setTimeout(() => {
-      navigate('/', { replace: true });
-    }, 50);
+    setTimeout(() => navigate('/', { replace: true }), 50);
   };
 
   return (
     <header className="bg-gray-950 text-white border-b border-gray-800 sticky top-0 z-50">
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
-          {/* Логотип */}
-          <motion.div 
+          <motion.div
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             className="flex items-center cursor-pointer group"
-            onClick={() => { 
-              navigate('/'); 
-              window.scrollTo(0, 0); 
+            onClick={() => {
+              navigate('/');
+              window.scrollTo(0, 0);
             }}
           >
             <div className="relative">
@@ -52,11 +46,9 @@ const Header: FC = () => {
             </span>
           </motion.div>
 
-          {/* Кнопка входа/выхода */}
           <div className="flex items-center gap-4">
             {isAuth ? (
               <>
-                {/* Кнопка для перехода на админ-панель */}
                 {role === 'ADMIN' && (
                   <motion.button
                     whileHover={{ scale: 1.05 }}
@@ -68,8 +60,60 @@ const Header: FC = () => {
                   </motion.button>
                 )}
 
-                {/* Кнопки для обычного пользователя */}
-                {role !== 'ADMIN' && (
+                {role === 'MANAGER' && (
+                  <>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-700 rounded-lg font-medium"
+                      onClick={() => navigate('/manager')}
+                    >
+                      Панель менеджера
+                    </motion.button>
+
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex items-center px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg font-medium"
+                      onClick={() => navigate('/manager/schedule')}
+                    >
+                      Календарь
+                    </motion.button>
+
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex items-center px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 rounded-lg font-medium"
+                      onClick={() => navigate('/application')}
+                    >
+                      <FaCalendarAlt className="mr-2" />
+                      Запись на ремонт
+                    </motion.button>
+
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex items-center px-4 py-2 bg-gray-800 border border-cyan-500 rounded-lg font-medium"
+                      onClick={() => navigate('/profile')}
+                    >
+                      <FaUser className="mr-2" />
+                      Профиль
+                    </motion.button>
+                  </>
+                )}
+
+                {role === 'SERVICE_EMPLOYEE' && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-700 rounded-lg font-medium"
+                    onClick={() => navigate('/service')}
+                  >
+                    Панель сотрудника
+                  </motion.button>
+                )}
+
+                {role === 'CLIENT' && (
                   <>
                     <motion.button
                       whileHover={{ scale: 1.05 }}
@@ -94,7 +138,7 @@ const Header: FC = () => {
                 )}
 
                 <motion.button
-                  whileHover={{ scale: 1.05, backgroundColor: "#dc2626" }}
+                  whileHover={{ scale: 1.05, backgroundColor: '#dc2626' }}
                   whileTap={{ scale: 0.95 }}
                   className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-800 hover:bg-red-900/50 text-red-400 transition-all"
                   onClick={logoutHandler}
